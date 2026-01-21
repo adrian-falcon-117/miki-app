@@ -1,4 +1,4 @@
-// src/Modules/cash/CashSales.jsx
+// src/pages/CashSales.js
 import React, { useEffect, useState, useCallback } from "react";
 import {
     Grid,
@@ -29,6 +29,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import ReplayIcon from "@mui/icons-material/Replay";
 import useCashbox from "../utils/useCashbox";
 import useSnackbar from "../utils/useSnackbar";
+import axios from "axios";
 
 /**
  * SaleCard: render reutilizable para una venta (tarjeta móvil)
@@ -76,6 +77,7 @@ function SaleCard({ sale, onCancel, onReactivate, formatDate }) {
 export default function CashSales() {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [saleToCancel, setSaleToCancel] = useState(null);
+    const [sales, setSales] = useState([]); // fuente de verdad local
     const [loading, setLoading] = useState(true);
 
     const theme = useTheme();
@@ -97,9 +99,6 @@ export default function CashSales() {
         return `${day}/${month}/${year} ${hh}:${mm}`;
     };
 
-    // ventas desde la apertura (fuente de verdad)
-    const sales = Array.isArray(cashboxOpening?.salesList) ? cashboxOpening.salesList : [];
-
     // recalcula acumuladores y guarda en cashboxOpening
     const recalcAndSaveTotals = useCallback((salesArray) => {
         const activeSales = (salesArray || []).filter(s => !s.canceled);
@@ -118,7 +117,7 @@ export default function CashSales() {
         setCashboxOpening(updated);
     }, [cashboxOpening, setCashboxOpening]);
 
-    // agrupa ventas por fecha (día)
+    // agrupa ventas por fecha (día) a partir del estado local `sales`
     const groupedSales = sales.reduce((groups, sale) => {
         const dateOnly = new Date(sale.created_at || sale.createdAt || sale.date || Date.now());
         const day = String(dateOnly.getDate()).padStart(2, "0");
@@ -130,7 +129,7 @@ export default function CashSales() {
         return groups;
     }, {});
 
-    // totales para mostrar en footer
+    // totales para mostrar en footer (desde `sales`)
     const totalsForCashbox = sales.reduce((acc, s) => {
         if (!s.canceled) {
             acc.cash += Number(s.cash) || 0;
@@ -154,38 +153,77 @@ export default function CashSales() {
             return;
         }
 
-        // cancelación local: marcamos canceled = true en salesList y recalculamos
         const id = saleToCancel.id;
-        const newSales = (sales || []).map(s => s.id === id ? { ...s, canceled: true } : s);
-        recalcAndSaveTotals(newSales);
-        showSnackbar("Venta cancelada ✅", "success");
 
-        setConfirmOpen(false);
-        setSaleToCancel(null);
+        try {
+            const res = await axios.put(`http://localhost:4000/sales/${id}/cancel`);
+            const updatedSale = res.data;
+
+            const newSales = (sales || []).map(s =>
+                s.id === id ? { ...s, ...updatedSale } : s
+            );
+
+            setSales(newSales); // 👈 ahora dentro del try
+            recalcAndSaveTotals(newSales);
+
+            showSnackbar("Venta cancelada ✅", "success");
+        } catch (err) {
+            console.error("Error cancelando venta:", err.response?.data || err.message);
+            showSnackbar("Error al cancelar venta", "error");
+        } finally {
+            setConfirmOpen(false);
+            setSaleToCancel(null);
+        }
     };
 
     const handleReactivateClick = async (sale) => {
         if (!sale || !cashboxOpening) return;
         const id = sale.id;
-        const newSales = (sales || []).map(s => s.id === id ? { ...s, canceled: false } : s);
-        recalcAndSaveTotals(newSales);
-        showSnackbar("Venta reactivada ✅", "success");
+
+        try {
+            // Llamada al backend para reactivar
+            const res = await axios.put(`http://localhost:4000/sales/${id}/reactivate`);
+            const updatedSale = res.data;
+
+            // Actualizamos la lista local con la respuesta
+            const newSales = (sales || []).map(s =>
+                s.id === id ? { ...s, ...updatedSale } : s
+            );
+
+            setSales(newSales);
+            recalcAndSaveTotals(newSales);
+
+            showSnackbar("Venta reactivada ✅", "success");
+        } catch (err) {
+            console.error("Error reactivando venta:", err.response?.data || err.message);
+            showSnackbar("Error al reactivar venta", "error");
+        }
     };
 
-    // Simula carga inicial (si querés hacer algo al montar)
+    // carga inicial: inicializamos `sales` desde cashboxOpening
     useEffect(() => {
-        // Si no hay caja abierta, no hay ventas que cargar
         setLoading(false);
+
         if (!isOpen || !cashboxOpening) {
             if (!isOpen) showSnackbar("No hay caja abierta", "warning");
+            setSales([]); // si no hay caja, dejamos vacío
         } else {
-            // recalcular por si el objeto cambió fuera de este componente
-            recalcAndSaveTotals(sales);
+            const initialSales = Array.isArray(cashboxOpening.salesList)
+                ? cashboxOpening.salesList
+                : [];
+            setSales(initialSales);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cashboxOpening, isOpen]);
 
-    // Si no hay caja abierta y no está cargando, mostramos mensaje
+    // recalcular totales SOLO cuando cambie `sales`
+    useEffect(() => {
+        if (sales.length > 0 && cashboxOpening) {
+            recalcAndSaveTotals(sales);
+        }
+    }, [sales]);
+
+
+    // render
     if (!isOpen && !loading) {
         return (
             <>
@@ -211,8 +249,8 @@ export default function CashSales() {
                     <Box sx={{ display: "flex", gap: 2, alignItems: "center", mt: 1, flexWrap: "wrap" }}>
                         <Typography>Abierta: {formatDate(cashboxOpening.opened_at)}</Typography>
                         <Typography>Inicial: ${Number(cashboxOpening.opening || 0).toFixed(2)}</Typography>
-                        {cashboxOpening.closed_at ? <Typography>Cerrada: {formatDate(cashboxOpening.closed_at)}</Typography> : <Typography>Caja abierta (en curso)</Typography>}
                         <Typography sx={{ ml: "auto", color: "text.secondary" }}>Ventas mostradas: {sales.length}</Typography>
+                        <Typography sx={{ ml: "auto", color: "text.secondary" }}>Ventas activas: {totalsForCashbox.count}</Typography>
                     </Box>
                 ) : null}
             </Box>
@@ -303,7 +341,7 @@ export default function CashSales() {
                 </>
             )}
 
-            <Paper elevation={6} sx={{ p: 2, display: "flex", gap: 3, alignItems: "center", width: "100%", maxWidth: 1200, bgcolor: "#2e7d32", color: "#fff", mt: 2 }}>
+            <Paper elevation={6} sx={{ p: 2, display: "flex", gap: 3, alignItems: "center", bgcolor: "#2e7d32", color: "#fff", mt: 2 }}>
                 <Box>
                     <Typography variant="subtitle2" sx={{ color: "#fff" }}>Totales (apertura)</Typography>
                     <Typography variant="h6" sx={{ fontWeight: "bold" }}>
@@ -321,10 +359,7 @@ export default function CashSales() {
                     <Typography variant="subtitle1" sx={{ fontWeight: "bold", color: "#fff" }}>${totalsForCashbox.transfer.toFixed(2)}</Typography>
                 </Box>
 
-                <Box sx={{ ml: "auto", textAlign: "right" }}>
-                    <Typography variant="body2" sx={{ color: "#fff" }}>Ventas activas</Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: "bold", color: "#fff" }}>{totalsForCashbox.count}</Typography>
-                </Box>
+
             </Paper>
 
             <Snackbar open={snackOpen} autoHideDuration={3000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>

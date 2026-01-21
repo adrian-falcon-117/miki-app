@@ -22,10 +22,13 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import axios from "axios";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { useLocation, useNavigate } from "react-router-dom";
+import useSnackbar from "../utils/useSnackbar";
 
 export default function SearchScreen({ onCheckout }) {
     const location = useLocation();
     const navigate = useNavigate();
+
+    const { open, message, severity, showSnackbar, closeSnackbar } = useSnackbar();
 
     // Inicializar carrito: primero lo que venga por location.state, si no lo que haya en localStorage
     const [cart, setCart] = useState(() => {
@@ -60,11 +63,6 @@ export default function SearchScreen({ onCheckout }) {
     const weightRef = useRef(null);
     const quantityRef = useRef(null);
     const searchRef = useRef(null);
-
-    // Snackbar para feedback
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState("");
-    const [snackbarSeverity, setSnackbarSeverity] = useState("success");
 
     // Estado para saber si la caja está abierta
     const [isCashboxOpen, setIsCashboxOpen] = useState(false);
@@ -112,18 +110,33 @@ export default function SearchScreen({ onCheckout }) {
         }
     }, [isCashboxOpen]);
 
+    useEffect(() => {
+        if (!query) {
+            setSuggestions([]);
+            return;
+        }
+
+        const fetchSuggestions = async () => {
+            try {
+                const res = await axios.get(
+                    `http://localhost:4000/products/search?q=${encodeURIComponent(query)}`
+                );
+                setSuggestions(res.data);
+            } catch (err) {
+                console.error("Error buscando productos:", err);
+            }
+        };
+
+        fetchSuggestions();
+    }, [query]);
+
+
     const closeScanner = () => {
         if (scannerRef.current) {
             scannerRef.current.clear().catch(() => { });
             scannerRef.current = null;
         }
         setScannerOpen(false);
-    };
-
-    const showSnackbar = (msg, severity = "success") => {
-        setSnackbarMessage(msg);
-        setSnackbarSeverity(severity);
-        setSnackbarOpen(true);
     };
 
     // Mantener localStorage sincronizado con cart
@@ -203,7 +216,15 @@ export default function SearchScreen({ onCheckout }) {
             return;
         }
         const parsed = parseInt(raw, 10);
-        setQuantity(Number.isNaN(parsed) ? "" : parsed);
+        const qty = Number.isNaN(parsed) ? "" : parsed;
+
+        // Validar stock
+        if (selectedProduct && qty > selectedProduct.stock) {
+            showSnackbar("Producto insuficiente en stock", "error");
+            setQuantity(selectedProduct.stock); // opcional: fijar al máximo disponible
+        } else {
+            setQuantity(qty);
+        }
     };
 
     // ---------- Lógica para productos por kilo ----------
@@ -214,6 +235,13 @@ export default function SearchScreen({ onCheckout }) {
         const kg = parsed === null || isNaN(parsed) ? null : parsed;
         setWeightKg(kg);
 
+        // Validar stock
+        if (selectedProduct && kg !== null && kg > selectedProduct.stock) {
+            showSnackbar("Producto insuficiente en stock", "error");
+            setWeightKg(selectedProduct.stock); // opcional: fijar al máximo disponible
+            setWeightInput(String(selectedProduct.stock));
+        }
+
         const basePricePerKg = parseFloat(selectedProduct?.salePrice) || 0;
         if (kg !== null && !isNaN(kg)) {
             const total = kg * basePricePerKg;
@@ -222,6 +250,7 @@ export default function SearchScreen({ onCheckout }) {
             setTotalPriceInput("");
         }
     };
+
 
     const onTotalPriceChange = (raw) => {
         setLastEdited("total");
@@ -447,7 +476,7 @@ export default function SearchScreen({ onCheckout }) {
 
     return (
         <div style={{ padding: 20 }}>
-            <Typography variant="h5">Buscar producto</Typography>
+            <Typography style={{ paddingBottom: 10 }} variant="h5">Buscar producto</Typography>
 
             <TextField
                 label="Nombre o código de barras"
@@ -466,119 +495,139 @@ export default function SearchScreen({ onCheckout }) {
                     )
                 }}
             />
-
-            <List>
-                {suggestions.map((p) => (
-                    <ListItem
-                        button
-                        key={p.id}
-                        onClick={() => handleSelectProduct(p)}
-                        disabled={!isCashboxOpen}
-                    >
-                        <ListItemText
-                            primary={p.name}
-                            secondary={`${p.description} — $${(Number(p.salePrice) || 0).toFixed(2)} ${p.unitType === "kg" ? "/kg" : "/u"}`}
-                        />
-                    </ListItem>
-                ))}
-            </List>
-
-            {selectedProduct && (
-                <div style={{ marginTop: 20 }}>
-                    <Typography>
-                        {selectedProduct.name} — {selectedProduct.description} — Precio base: ${(Number(selectedProduct.salePrice) || 0).toFixed(2)} {selectedProduct.unitType === "kg" ? "/kg" : "/u"}
-                    </Typography>
-
-                    {selectedProduct.unitType === "unit" ? (
-                        <div style={{ marginTop: 12 }}>
-                            <TextField
-                                label="Cantidad"
-                                type="number"
-                                inputProps={{ step: "1", min: "0" }}
-                                value={quantity}
-                                onChange={(e) => onQuantityChange(e.target.value)}
-                                inputRef={quantityRef}
-                                size="small"
-                                style={{ marginRight: 12 }}
-                                disabled={!isCashboxOpen}
+            <Paper
+                elevation={2}
+                sx={{
+                    maxHeight: 200, // altura aprox. para 3 ítems (ajustá según tu diseño)
+                    overflowY: "auto"
+                }}
+            >
+                <List>
+                    {suggestions.length === 0 && query && (
+                        <ListItem>
+                            <ListItemText
+                                primary="No se encontraron productos"
+                                secondary="Verifica el nombre o código de barras"
                             />
-                            {quantity > 0 ? (
-                                <Typography sx={{ color: "limegreen", fontWeight: "bold", marginTop: 1 }}>
-                                    Subtotal: ${(Number(quantity) * (Number(selectedProduct.salePrice) || 0)).toFixed(2)}
-                                </Typography>
-                            ) : null}
-                        </div>
-                    ) : (
-                        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginTop: 12 }}>
-                            <div>
-                                <TextField
-                                    label="Peso (kg)"
-                                    type="number"
-                                    inputProps={{ step: "0.001", min: "0" }}
-                                    value={weightInput}
-                                    onChange={(e) => onWeightChange(e.target.value)}
-                                    inputRef={weightRef}
-                                    size="small"
-                                    style={{ marginRight: 8 }}
-                                    disabled={!isCashboxOpen}
-                                />
-                            </div>
-
-                            <div>
-                                <TextField
-                                    label="Precio total"
-                                    type="number"
-                                    inputProps={{ step: "0.01", min: "0" }}
-                                    value={totalPriceInput}
-                                    onChange={(e) => onTotalPriceChange(e.target.value)}
-                                    size="small"
-                                    disabled={!isCashboxOpen}
-                                />
-                            </div>
-
-                            {weightKg !== null && !isNaN(weightKg) ? (
-                                <Typography sx={{ color: "limegreen", fontWeight: "bold", marginTop: 1 }}>
-                                    Subtotal base: ${(weightKg * (Number(selectedProduct.salePrice) || 0)).toFixed(2)}
-                                </Typography>
-                            ) : null}
-                        </div>
+                        </ListItem>
                     )}
 
-                    <div style={{ marginTop: 10 }}>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleAddToCart}
-                            sx={{ marginRight: 1 }}
-                            disabled={
-                                !isCashboxOpen || (
-                                    selectedProduct.unitType === "unit"
-                                        ? !(quantity && Number(quantity) > 0)
-                                        : !(weightKg && weightKg > 0)
-                                )
-                            }
+                    {suggestions.map((p) => (
+                        <ListItem
+                            button
+                            key={p.id}
+                            onClick={() => handleSelectProduct(p)}
+                            disabled={!isCashboxOpen}
                         >
-                            Agregar
-                        </Button>
-                        <Button variant="outlined" color="error" onClick={() => {
-                            setSelectedProduct(null);
-                            setQuantity("");
-                            setWeightInput("");
-                            setWeightKg(null);
-                            setTotalPriceInput("");
-                            setLastEdited(null);
-                            if (searchRef.current) searchRef.current.focus();
-                        }}>
-                            Cancelar
-                        </Button>
-                        {!isCashboxOpen && (
-                            <Typography variant="caption" sx={{ color: "error.main", display: "block", marginTop: 1 }}>
-                                Abra la caja primero para poder agregar productos
-                            </Typography>
+                            <ListItemText
+                                primary={p.name}
+                                secondary={`${p.description} — $${(Number(p.salePrice) || 0).toFixed(2)} ${p.unitType === "kg" ? "/kg" : "/u"
+                                    }`}
+                            />
+                        </ListItem>
+                    ))}
+                </List>
+            </Paper>
+
+
+            {
+                selectedProduct && (
+                    <div style={{ marginTop: 20 }}>
+                        <Typography>
+                            {selectedProduct.name} — {selectedProduct.description} — Precio base: ${(Number(selectedProduct.salePrice) || 0).toFixed(2)} {selectedProduct.unitType === "kg" ? "/kg" : "/u"}
+                        </Typography>
+
+                        {selectedProduct.unitType === "unit" ? (
+                            <div style={{ marginTop: 12 }}>
+                                <TextField
+                                    label="Cantidad"
+                                    type="number"
+                                    inputProps={{ step: "1", min: "0" }}
+                                    value={quantity}
+                                    onChange={(e) => onQuantityChange(e.target.value)}
+                                    inputRef={quantityRef}
+                                    size="small"
+                                    style={{ marginRight: 12 }}
+                                    disabled={!isCashboxOpen}
+                                />
+                                {quantity > 0 ? (
+                                    <Typography sx={{ fontWeight: "bold", marginTop: 1 }}>
+                                        Subtotal: ${(Number(quantity) * (Number(selectedProduct.salePrice) || 0)).toFixed(2)}
+                                    </Typography>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div style={{ marginTop: 12 }}>
+                                <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                                    <TextField
+                                        label="Peso (kg)"
+                                        type="number"
+                                        inputProps={{ step: "0.001", min: "0" }}
+                                        value={weightInput}
+                                        onChange={(e) => onWeightChange(e.target.value)}
+                                        inputRef={weightRef}
+                                        size="small"
+                                        style={{ marginRight: 8 }}
+                                        disabled={!isCashboxOpen}
+                                    />
+
+                                    <TextField
+                                        label="Precio total"
+                                        type="number"
+                                        inputProps={{ step: "0.01", min: "0" }}
+                                        value={totalPriceInput}
+                                        onChange={(e) => onTotalPriceChange(e.target.value)}
+                                        size="small"
+                                        disabled={!isCashboxOpen}
+                                    />
+                                </div>
+
+                                <div>
+                                    {weightKg !== null && !isNaN(weightKg) ? (
+                                        <Typography sx={{ fontWeight: "bold", marginTop: 1 }}>
+                                            Subtotal: ${(weightKg * (Number(selectedProduct.salePrice) || 0)).toFixed(2)}
+                                        </Typography>
+                                    ) : null}
+                                </div>
+                            </div>
                         )}
+
+                        <div style={{ marginTop: 10 }}>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={handleAddToCart}
+                                sx={{ marginRight: 1 }}
+                                disabled={
+                                    !isCashboxOpen || (
+                                        selectedProduct.unitType === "unit"
+                                            ? !(quantity && Number(quantity) > 0)
+                                            : !(weightKg && weightKg > 0)
+                                    )
+                                }
+                            >
+                                Agregar
+                            </Button>
+                            <Button variant="outlined" color="error" onClick={() => {
+                                setSelectedProduct(null);
+                                setQuantity("");
+                                setWeightInput("");
+                                setWeightKg(null);
+                                setTotalPriceInput("");
+                                setLastEdited(null);
+                                if (searchRef.current) searchRef.current.focus();
+                            }}>
+                                Cancelar
+                            </Button>
+                            {!isCashboxOpen && (
+                                <Typography variant="caption" sx={{ color: "error.main", display: "block", marginTop: 1 }}>
+                                    Abra la caja primero para poder agregar productos
+                                </Typography>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <Paper elevation={4} sx={{ marginTop: 3, padding: 2, backgroundColor: "#2e7d32", color: "#fff" }}>
                 <Typography variant="h6" sx={{ fontWeight: "bold" }}>Carrito</Typography>
@@ -639,24 +688,26 @@ export default function SearchScreen({ onCheckout }) {
             </Paper>
 
             {/* Mensaje fijo al final si la caja está cerrada con botón para abrir caja */}
-            {!isCashboxOpen && (
-                <Box sx={{ mt: 2 }}>
-                    <Paper elevation={3} sx={{ p: 2, backgroundColor: "#ffebee" }}>
-                        <Typography sx={{ color: "error.main", fontWeight: "bold", textAlign: "center", mb: 1 }}>
-                            Abra la caja primero para poder vender
-                        </Typography>
-                        <Box sx={{ display: "flex", justifyContent: "center" }}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={() => navigate("/cash/open")}
-                            >
-                                Abrir caja
-                            </Button>
-                        </Box>
-                    </Paper>
-                </Box>
-            )}
+            {
+                !isCashboxOpen && (
+                    <Box sx={{ mt: 2 }}>
+                        <Paper elevation={3} sx={{ p: 2, backgroundColor: "#ffebee" }}>
+                            <Typography sx={{ color: "error.main", fontWeight: "bold", textAlign: "center", mb: 1 }}>
+                                Abra la caja primero para poder vender
+                            </Typography>
+                            <Box sx={{ display: "flex", justifyContent: "center" }}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={() => navigate("/cash/open")}
+                                >
+                                    Abrir caja
+                                </Button>
+                            </Box>
+                        </Paper>
+                    </Box>
+                )
+            }
 
             <Dialog open={scannerOpen} onClose={closeScanner} fullWidth maxWidth="sm">
                 <DialogTitle>Escanear código de barras</DialogTitle>
@@ -668,18 +719,16 @@ export default function SearchScreen({ onCheckout }) {
                 </DialogActions>
             </Dialog>
 
-            <Snackbar
-                open={snackbarOpen}
+            <Snackbar open={open}
                 autoHideDuration={3000}
-                onClose={() => setSnackbarOpen(false)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            >
-                <Alert severity={snackbarSeverity} onClose={() => setSnackbarOpen(false)}>
-                    {snackbarMessage}
+                onClose={closeSnackbar}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+                <Alert severity={severity} onClose={closeSnackbar}>
+                    {message}
                 </Alert>
             </Snackbar>
-        </div>
+        </div >
     );
 }
 
-//Falta crear la seccion para estadisticas de ventas, correjir algunos texto y ver que mas falta
+//Mejorar las busquedad para que sea mas precisa

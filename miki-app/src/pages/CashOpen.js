@@ -24,7 +24,7 @@ export default function CashOpen() {
 
     return (
         <div style={{ padding: "20px" }}>
-            <Typography variant="h5">Apertura de Caja</Typography>
+            <Typography style={{ paddingBottom: 10 }} variant="h5">Apertura de Caja</Typography>
             <Stack spacing={2}>
                 <TextField
                     label="Monto inicial"
