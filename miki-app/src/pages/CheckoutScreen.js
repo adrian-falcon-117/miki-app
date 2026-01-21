@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import useCashbox from "../utils/useCashbox";
 import useSnackbar from "../utils/useSnackbar";
+import getSaleDateTime from "../utils/useFormattedDateTime"
 
 export default function CheckoutSale({ cart = [], onFinish }) {
     const [cash, setCash] = useState("");
@@ -23,6 +24,7 @@ export default function CheckoutSale({ cart = [], onFinish }) {
     const { addSale, cashboxOpening, isOpen } = useCashbox();
     const { open: snackOpen, message: snackMessage, severity: snackSeverity, showSnackbar, closeSnackbar } = useSnackbar();
 
+    const { date: sale_date, time: sale_time } = getSaleDateTime();
     // Calcular total según tipo de producto
     const totalCart = cart.reduce((sum, item) => {
         if (item.unitType === "unit") {
@@ -91,7 +93,8 @@ export default function CheckoutSale({ cart = [], onFinish }) {
             cash: cashPaid,
             transfer: transferPaid,
             canceled: false,
-            created_at: new Date().toISOString()
+            sale_date,
+            sale_time
         };
 
         try {
@@ -101,7 +104,9 @@ export default function CheckoutSale({ cart = [], onFinish }) {
                 amount: salePayload.amount,
                 cash: salePayload.cash,
                 transfer: salePayload.transfer,
-                canceled: 0
+                canceled: 0,
+                sale_date,
+                sale_time
             });
 
             // Si backend responde con la venta creada, la usamos
@@ -132,11 +137,30 @@ export default function CheckoutSale({ cart = [], onFinish }) {
             // Limpiar carrito local
             try { localStorage.removeItem("cart"); } catch { }
 
+            for (const item of cart) {
+                try {
+                    const qty = item.unitType === "unit"
+                        ? Number(item.quantity) || 0
+                        : Number(item.quantityKg) || 0;
+
+                    if (qty > 0) {
+                        await axios.put(`http://localhost:4000/products/${item.id}/decrement`, {
+                            quantity: qty
+                        });
+                    }
+                } catch (stockErr) {
+                    console.error("Error descontando stock:", stockErr);
+                    showSnackbar(`No se pudo descontar stock de ${item.name}`, "error");
+                }
+            }
+
+
             showSnackbar("Venta registrada ✅", "success");
 
             if (typeof onFinish === "function") {
                 onFinish({ ...createdSale, change, cart });
             }
+
 
             navigate("/");
         } catch (err) {

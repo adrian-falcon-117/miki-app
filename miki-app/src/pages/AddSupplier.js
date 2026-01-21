@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { TextField, Button, Stack, Typography, Snackbar, Alert } from "@mui/material";
 import axios from "axios";
 import { validateSupplier } from "../utils/validators";
+import useSnackbar from "../utils/useSnackbar";
 
 export default function AddSupplier() {
     const [name, setName] = useState("");
@@ -9,15 +10,7 @@ export default function AddSupplier() {
     const [address, setAddress] = useState("");
     const [info, setInfo] = useState("");
 
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState("");
-    const [snackbarSeverity, setSnackbarSeverity] = useState("success");
-
-    const showSnackbar = (msg, severity = "success") => {
-        setSnackbarMessage(msg);
-        setSnackbarSeverity(severity);
-        setSnackbarOpen(true);
-    };
+    const { open, message, severity, showSnackbar, closeSnackbar } = useSnackbar();
 
     const handleSubmit = () => {
         const supplierData = {
@@ -60,8 +53,15 @@ export default function AddSupplier() {
                 <Button variant="contained" color="success" onClick={handleSubmit}>Guardar Proveedor</Button>
             </Stack>
 
-            <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={() => setSnackbarOpen(false)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-                <Alert severity={snackbarSeverity} onClose={() => setSnackbarOpen(false)}>{snackbarMessage}</Alert>
+            <Snackbar
+                open={open}
+                autoHideDuration={3000}
+                onClose={closeSnackbar}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+                <Alert severity={severity} onClose={closeSnackbar}>
+                    {message}
+                </Alert>
             </Snackbar>
         </div>
     );

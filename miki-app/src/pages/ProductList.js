@@ -342,21 +342,6 @@ export default function ProductList() {
         <>
             {/* Controles superiores */}
             <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
-                <TextField
-                    placeholder="Buscar por nombre, descripción o código"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    size="small"
-                    sx={{ flex: 1 }}
-                    InputProps={{
-                        endAdornment: (
-                            <InputAdornment position="end">
-                                {query ? <Button size="small" onClick={() => setQuery("")}>Limpiar</Button> : null}
-                            </InputAdornment>
-                        )
-                    }}
-                />
-
                 <Select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} size="small">
                     <MenuItem value="all">Todos</MenuItem>
                     <MenuItem value="unit">Por unidad</MenuItem>
@@ -542,9 +527,14 @@ export default function ProductList() {
                                                     ${Number(product.salePrice || 0).toFixed(2)}
                                                 </Typography>
 
-                                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                                                <Typography
+                                                    variant="caption"
+                                                    color={product.stock === 0 ? "error" : "text.secondary"}
+                                                    sx={{ display: "block", mt: 1 }}
+                                                >
                                                     Stock: {product.stock ?? 0} {product.unitType === "kg" ? "Kg" : "Unidad/es"}
                                                 </Typography>
+
 
                                                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
                                                     Incremento: {product.incrementType === "percentage" ? `${product.incrementValue}%` : `$${product.incrementValue}`}

@@ -6,6 +6,7 @@ import {
 import axios from "axios";
 import { useTheme, useMediaQuery } from "@mui/material";
 import useSnackbar from "../utils/useSnackbar";
+import useFormattedDateDMY from "../utils/useFormattedDateDMY";
 
 export default function VentasScreen() {
     const [ventas, setVentas] = useState([]);
@@ -13,7 +14,7 @@ export default function VentasScreen() {
     const [month, setMonth] = useState("01");
     const [year, setYear] = useState("2026");
     const { open, message, severity, showSnackbar, closeSnackbar } = useSnackbar();
-
+    const formatDateDMY = useFormattedDateDMY();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -23,6 +24,8 @@ export default function VentasScreen() {
                 params: { month, year }
             });
             setVentas(res.data.rows);
+            console.log("Ventas recibidas:", res.data);
+
 
             // calcular totales
             const general = res.data.rows.reduce((acc, v) => acc + v.amount, 0);
@@ -87,17 +90,24 @@ export default function VentasScreen() {
 
 
             {/* Tabla en desktop / tarjetas en mobile */}
-            {!isMobile ? (
+            {ventas.length === 0 ? (
+                <Paper sx={{ p: 2, textAlign: "center" }}>
+                    <Typography variant="subtitle1" color="text.secondary">
+                        No se encontraron ventas para el período seleccionado
+                    </Typography>
+                </Paper>
+            ) : !isMobile ? (
                 <Paper>
                     <Table>
                         <TableHead>
                             <TableRow>
-                                <TableCell>ID</TableCell>
-                                <TableCell>Descripción</TableCell>
-                                <TableCell align="right">Monto</TableCell>
-                                <TableCell align="right">Efectivo</TableCell>
-                                <TableCell align="right">Transferencia</TableCell>
-                                <TableCell>Fecha</TableCell>
+                                <TableCell><Typography sx={{ fontWeight: "bold" }}>ID</Typography></TableCell>
+                                <TableCell><Typography sx={{ fontWeight: "bold" }}>Descripcion</Typography></TableCell>
+                                <TableCell align="right"><Typography sx={{ fontWeight: "bold" }}>Efectivo</Typography></TableCell>
+                                <TableCell align="right"><Typography sx={{ fontWeight: "bold" }}>Transferencia</Typography></TableCell>
+                                <TableCell align="right"><Typography sx={{ fontWeight: "bold" }}>Monto</Typography></TableCell>
+                                <TableCell><Typography sx={{ fontWeight: "bold" }}>Fecha</Typography></TableCell>
+                                <TableCell><Typography sx={{ fontWeight: "bold" }}>Hora</Typography></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -105,10 +115,11 @@ export default function VentasScreen() {
                                 <TableRow key={v.id}>
                                     <TableCell>{v.id}</TableCell>
                                     <TableCell>{v.description}</TableCell>
-                                    <TableCell align="right">${v.amount.toFixed(2)}</TableCell>
                                     <TableCell align="right">${v.cash.toFixed(2)}</TableCell>
                                     <TableCell align="right">${v.transfer.toFixed(2)}</TableCell>
-                                    <TableCell>{new Date(v.created_at).toLocaleString()}</TableCell>
+                                    <TableCell align="right">${v.amount.toFixed(2)}</TableCell>
+                                    <TableCell>{formatDateDMY(v.sale_date)}</TableCell>
+                                    <TableCell>{v.sale_time}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -117,13 +128,13 @@ export default function VentasScreen() {
             ) : (
                 <Stack spacing={2}>
                     {ventas.map((v) => (
-                        <Paper key={v.id} sx={{ p: 2 }}>
+                        <Paper key={v.id} sx={{ p: 2, borderLeft: "6px solid #1976d2" }}>
                             <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>{v.description}</Typography>
-                            <Typography>Monto: ${v.amount.toFixed(2)}</Typography>
                             <Typography>Efectivo: ${v.cash.toFixed(2)}</Typography>
                             <Typography>Transferencia: ${v.transfer.toFixed(2)}</Typography>
+                            <Typography>Monto: ${v.amount.toFixed(2)}</Typography>
                             <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                                Fecha: {new Date(v.created_at).toLocaleString()}
+                                Fecha: {formatDateDMY(v.sale_date)} - {v.sale_time}
                             </Typography>
                         </Paper>
                     ))}

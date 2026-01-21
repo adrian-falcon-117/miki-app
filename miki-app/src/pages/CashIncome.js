@@ -50,7 +50,7 @@ export default function CashIncome() {
 
         setAmount("");
         setDescription("");
-        showSnackbar("Ingreso registrado ✅", "success");
+        showSnackbar("Ingreso registrado", "success");
     };
 
     return (

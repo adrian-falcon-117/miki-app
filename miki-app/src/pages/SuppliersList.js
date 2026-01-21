@@ -11,14 +11,13 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
 import axios from "axios";
 import { validateSupplier } from "../utils/validators";
+import useSnackbar from "../utils/useSnackbar";
 
 export default function SuppliersList() {
     const [suppliers, setSuppliers] = useState([]);
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({});
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState("");
-    const [snackbarSeverity, setSnackbarSeverity] = useState("success");
+    const { open, message, severity, showSnackbar, closeSnackbar } = useSnackbar();
 
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteId, setDeleteId] = useState(null);
@@ -37,12 +36,6 @@ export default function SuppliersList() {
                 console.error(err);
                 showSnackbar("Error al cargar proveedores", "error");
             });
-    };
-
-    const showSnackbar = (msg, severity = "success") => {
-        setSnackbarMessage(msg);
-        setSnackbarSeverity(severity);
-        setSnackbarOpen(true);
     };
 
     const startEdit = (s) => {
@@ -231,7 +224,7 @@ export default function SuppliersList() {
                             </Box>
 
                             {suppliers.map((s) => (
-                                <Paper key={s.id} elevation={2} sx={{ p: 2, borderLeft: "6px solid #1976d2"}}>
+                                <Paper key={s.id} elevation={2} sx={{ p: 2, borderLeft: "6px solid #1976d2" }}>
                                     <Stack spacing={1}>
                                         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 1 }}>
                                             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -316,13 +309,13 @@ export default function SuppliersList() {
             )}
 
             <Snackbar
-                open={snackbarOpen}
+                open={open}
                 autoHideDuration={3000}
-                onClose={() => setSnackbarOpen(false)}
+                onClose={closeSnackbar}
                 anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
             >
-                <Alert severity={snackbarSeverity} onClose={() => setSnackbarOpen(false)}>
-                    {snackbarMessage}
+                <Alert severity={severity} onClose={closeSnackbar}>
+                    {message}
                 </Alert>
             </Snackbar>
 

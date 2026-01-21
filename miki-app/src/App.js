@@ -3,7 +3,6 @@ import { Routes, Route, useNavigate } from "react-router-dom";
 import BottomNav from "./components/BottomNav";
 
 // Módulos existentes
-import CashModule from "./modules/cash/CashModule";
 import SuppliersSheet from "./modules/suppliers/SuppliersSheet";
 import CashSheet from "./modules/cash/CashSheet";
 import CashOpen from "./pages/CashOpen";
@@ -61,7 +60,6 @@ function App() {
         />
 
         {/* Caja */}
-        <Route path="/cash" element={<CashModule />} />
         <Route path="/cash/open" element={<CashOpen />} />
         <Route path="/cash/sales" element={<CashSales />} />
         <Route path="/cash/income" element={<CashIncome />} />

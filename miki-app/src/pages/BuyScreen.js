@@ -1,17 +1,39 @@
-// BuyScreenComplete.jsx
 import React, { useEffect, useState } from "react";
 import {
-    Box, Typography, Paper, TextField, Button, FormControl, InputLabel, Select, MenuItem,
-    Snackbar, Alert, Table, TableHead, TableRow, TableCell, TableBody,
-    Tabs, Tab, IconButton, useMediaQuery, useTheme,
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Grid
+    Box,
+    Typography,
+    Paper,
+    TextField,
+    Button,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Snackbar,
+    Alert,
+    Table,
+    TableHead,
+    TableRow,
+    TableCell,
+    TableBody,
+    Tabs,
+    Tab,
+    IconButton,
+    useMediaQuery,
+    useTheme,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogContentText,
+    DialogActions,
+    Divider
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import axios from "axios";
-import { Divider } from "@mui/material";
 import useSnackbar from "../utils/useSnackbar";
-
+import useFormattedDateTime from "../utils/useFormattedDateTime"; // hook que devuelve { date: 'YYYY-MM-DD', time: 'HH:mm' } actuales
+import useFormattedDateDMY from "../utils/useFormattedDateDMY"; // función para formatear DD/MM/YYYY
 
 function TabPanel({ children, value, index }) {
     return value === index ? <Box sx={{ mt: 2 }}>{children}</Box> : null;
@@ -35,7 +57,9 @@ export default function BuyScreenComplete() {
         quantity: "",
         unit_cost: "",
         unitType: "unit",
-        id: null
+        id: null,
+        cash: "",
+        transfer: ""
     });
 
     // Filtro mes/año
@@ -50,6 +74,10 @@ export default function BuyScreenComplete() {
 
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+    // Hooks de fecha/hora
+    const currentDateTime = useFormattedDateTime(); // { date: 'YYYY-MM-DD', time: 'HH:mm' } locales
+    const formatDateDMY = useFormattedDateDMY(); // función para formatear DD/MM/YYYY
 
     useEffect(() => {
         fetchProducts();
@@ -88,7 +116,16 @@ export default function BuyScreenComplete() {
     };
 
     const resetForm = () => {
-        setForm({ product_id: "", supplier_id: "", quantity: "", unit_cost: "", unitType: "unit", id: null });
+        setForm({
+            product_id: "",
+            supplier_id: "",
+            quantity: "",
+            unit_cost: "",
+            unitType: "unit",
+            id: null,
+            cash: "",
+            transfer: ""
+        });
     };
 
     const handleSubmit = async () => {
@@ -104,7 +141,10 @@ export default function BuyScreenComplete() {
             unit_cost: parseFloat(form.unit_cost),
             unitType: form.unitType,
             cash: parseFloat(form.cash) || 0,
-            transfer: parseFloat(form.transfer) || 0
+            transfer: parseFloat(form.transfer) || 0,
+            // Guardamos fecha y hora por separado usando el hook que devuelve la hora actual (local)
+            buy_date: currentDateTime.date, // YYYY-MM-DD
+            buy_time: currentDateTime.time  // HH:mm
         };
 
         try {
@@ -144,7 +184,6 @@ export default function BuyScreenComplete() {
         }
     };
 
-
     const handleEdit = (pu) => {
         setForm({
             product_id: pu.product_id,
@@ -152,7 +191,9 @@ export default function BuyScreenComplete() {
             quantity: String(pu.quantity),
             unit_cost: String(pu.unit_cost),
             unitType: pu.unitType || "unit",
-            id: pu.id
+            id: pu.id,
+            cash: pu.cash || "",
+            transfer: pu.transfer || ""
         });
         setTab(0);
     };
@@ -166,7 +207,7 @@ export default function BuyScreenComplete() {
         if (!selectedPurchase) return;
         try {
             await axios.delete(`http://localhost:4000/purchases/${selectedPurchase.id}`);
-            showSnackbar("Compra eliminada", "success" );
+            showSnackbar("Compra eliminada", "success");
             fetchPurchases(filterMonth, filterYear);
             fetchProducts();
         } catch (err) {
@@ -196,7 +237,9 @@ export default function BuyScreenComplete() {
 
     return (
         <Box sx={{ p: 2 }}>
-            <Typography variant="h5" gutterBottom>Compras</Typography>
+            <Typography variant="h5" gutterBottom>
+                Compras
+            </Typography>
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="tabs compras">
                 <Tab label="Comprar" />
@@ -215,15 +258,16 @@ export default function BuyScreenComplete() {
                                 label="Producto"
                                 onChange={(e) => setForm({ ...form, product_id: e.target.value })}
                             >
-                                <MenuItem value=""><em>Seleccionar</em></MenuItem>
-                                {products.map((p) => (
+                                <MenuItem value="">
+                                    <em>Seleccionar</em>
+                                </MenuItem>
+                                {products.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
                                     <MenuItem key={p.id} value={p.id}>
                                         {p.name} — {p.description || ""}
                                     </MenuItem>
                                 ))}
                             </Select>
                         </FormControl>
-
 
                         {/* Proveedor */}
                         <FormControl fullWidth>
@@ -233,9 +277,13 @@ export default function BuyScreenComplete() {
                                 label="Proveedor"
                                 onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
                             >
-                                <MenuItem value=""><em>Seleccionar</em></MenuItem>
+                                <MenuItem value="">
+                                    <em>Seleccionar</em>
+                                </MenuItem>
                                 {suppliers.map((s) => (
-                                    <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                                    <MenuItem key={s.id} value={s.id}>
+                                        {s.name}
+                                    </MenuItem>
                                 ))}
                             </Select>
                         </FormControl>
@@ -277,7 +325,6 @@ export default function BuyScreenComplete() {
                         </Divider>
                         {/* Forma de pago */}
                         <Box sx={{ display: "flex", gap: 2 }}>
-
                             <TextField
                                 label="Monto en efectivo"
                                 type="number"
@@ -294,13 +341,14 @@ export default function BuyScreenComplete() {
                             />
                         </Box>
 
-
                         {/* Botones en fila */}
                         <Box sx={{ display: "flex", gap: 2 }}>
                             <Button variant="contained" onClick={handleSubmit}>
                                 {form.id ? "Actualizar Compra" : "Guardar Compra"}
                             </Button>
-                            <Button variant="outlined" onClick={resetForm}>Limpiar</Button>
+                            <Button variant="outlined" onClick={resetForm}>
+                                Limpiar
+                            </Button>
                         </Box>
                     </Box>
                 </Paper>
@@ -311,12 +359,10 @@ export default function BuyScreenComplete() {
                 <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
                     <FormControl sx={{ minWidth: 140 }}>
                         <InputLabel>Mes</InputLabel>
-                        <Select
-                            value={filterMonth}
-                            label="Mes"
-                            onChange={(e) => setFilterMonth(e.target.value)}
-                        >
-                            <MenuItem value=""><em>Todos</em></MenuItem>
+                        <Select value={filterMonth} label="Mes" onChange={(e) => setFilterMonth(e.target.value)}>
+                            <MenuItem value="">
+                                <em>Todos</em>
+                            </MenuItem>
                             <MenuItem value="01">Enero</MenuItem>
                             <MenuItem value="02">Febrero</MenuItem>
                             <MenuItem value="03">Marzo</MenuItem>
@@ -334,21 +380,25 @@ export default function BuyScreenComplete() {
 
                     <FormControl sx={{ minWidth: 140 }}>
                         <InputLabel>Año</InputLabel>
-                        <Select
-                            value={filterYear}
-                            label="Año"
-                            onChange={(e) => setFilterYear(e.target.value)}
-                        >
-                            <MenuItem value=""><em>Todos</em></MenuItem>
+                        <Select value={filterYear} label="Año" onChange={(e) => setFilterYear(e.target.value)}>
+                            <MenuItem value="">
+                                <em>Todos</em>
+                            </MenuItem>
                             {getYears(6).map((y) => (
-                                <MenuItem key={y} value={y}>{y}</MenuItem>
+                                <MenuItem key={y} value={y}>
+                                    {y}
+                                </MenuItem>
                             ))}
                         </Select>
                     </FormControl>
 
                     <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-                        <Button variant="contained" onClick={applyFilter}>Buscar</Button>
-                        <Button variant="outlined" onClick={clearFilter}>Limpiar</Button>
+                        <Button variant="contained" onClick={applyFilter}>
+                            Buscar
+                        </Button>
+                        <Button variant="outlined" onClick={clearFilter}>
+                            Limpiar
+                        </Button>
                     </Box>
                 </Box>
 
@@ -357,22 +407,25 @@ export default function BuyScreenComplete() {
                         <Table>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Producto</TableCell>
-                                    <TableCell>Proveedor</TableCell>
-                                    <TableCell>Cantidad</TableCell>
-                                    <TableCell>Unidad</TableCell>
-                                    <TableCell>Precio Unitario</TableCell>
-                                    <TableCell>Total</TableCell>
-                                    <TableCell>Efectivo</TableCell>
-                                    <TableCell>Transferencia</TableCell>
-                                    <TableCell>Fecha</TableCell>
-                                    <TableCell>Acciones</TableCell>
+                                    <TableCell ><Typography sx={{ fontWeight: "bold" }}>Producto</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Detalle</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Proveedor</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Cantidad</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Unidad</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Precio unitario</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Total</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Efectivo</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Transferencia</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Fecha</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Hora</Typography></TableCell>
+                                    <TableCell><Typography sx={{ fontWeight: "bold" }}>Acciones</Typography></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {purchases.map((pu) => (
                                     <TableRow key={pu.id}>
                                         <TableCell>{pu.product_name}</TableCell>
+                                        <TableCell>{pu.product_description || ""}</TableCell>
                                         <TableCell>{pu.supplier_name}</TableCell>
                                         <TableCell>{pu.quantity}</TableCell>
                                         <TableCell>{pu.unitType || "unit"}</TableCell>
@@ -380,10 +433,15 @@ export default function BuyScreenComplete() {
                                         <TableCell>${(pu.total || 0).toFixed(2)}</TableCell>
                                         <TableCell>${(pu.cash || 0).toFixed(2)}</TableCell>
                                         <TableCell>${(pu.transfer || 0).toFixed(2)}</TableCell>
-                                        <TableCell>{new Date(pu.created_at).toLocaleString()}</TableCell>
+                                        <TableCell>{formatDateDMY(pu.buy_date)}</TableCell>
+                                        <TableCell>{pu.buy_time}</TableCell>
                                         <TableCell>
-                                            <IconButton color="primary" onClick={() => handleEdit(pu)}><EditIcon /></IconButton>
-                                            <IconButton color="error" onClick={() => handleDeleteClick(pu)}><DeleteIcon /></IconButton>
+                                            <IconButton color="primary" onClick={() => handleEdit(pu)}>
+                                                <EditIcon />
+                                            </IconButton>
+                                            <IconButton color="error" onClick={() => handleDeleteClick(pu)}>
+                                                <DeleteIcon />
+                                            </IconButton>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -391,77 +449,87 @@ export default function BuyScreenComplete() {
                         </Table>
                     </Paper>
                 ) : (
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        {purchases.map((pu) => (
-                            <Paper key={pu.id} sx={{ p: 2 }}>
-                                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 2 }}>
-                                    <Box sx={{ flex: 1 }}>
-                                        <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>{pu.product_name}</Typography>
-                                        <Typography variant="body2" color="text.secondary">{pu.supplier_name}</Typography>
-                                        <Typography sx={{ mt: 1 }}>
-                                            <strong>Cantidad:</strong> {pu.quantity} {pu.unitType || "unit"}
-                                        </Typography>
-                                        <Typography>
-                                            <strong>Precio unitario:</strong> ${(pu.unit_cost || 0).toFixed(2)}
-                                        </Typography>
-                                        <Typography>
-                                            <strong>Total:</strong> ${(pu.total || 0).toFixed(2)}
-                                        </Typography>
-                                        <Typography>
-                                            <strong>Efectivo:</strong> ${(pu.cash || 0).toFixed(2)}
-                                        </Typography>
-                                        <Typography>
-                                            <strong>Transferencia:</strong> ${(pu.transfer || 0).toFixed(2)}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {new Date(pu.created_at).toLocaleString()}
-                                        </Typography>
-                                    </Box>
+                    <Box>
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {purchases.map((pu) => (
+                                <Paper key={pu.id} sx={{ p: 2, borderLeft: "6px solid #1976d2" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 2 }}>
+                                        <Box sx={{ flex: 1 }}>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                                                {pu.product_name}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {pu.product_description || ""}
+                                            </Typography>
+                                            <Typography>
+                                                {pu.supplier_name}
+                                            </Typography>
+                                            <Typography sx={{ mt: 1 }}>
+                                                <strong>Cantidad:</strong> {pu.quantity} {pu.unitType || "unit"}
+                                            </Typography>
+                                            <Typography>
+                                                <strong>Precio unitario:</strong> ${(pu.unit_cost || 0).toFixed(2)}
+                                            </Typography>
+                                            <Typography>
+                                                <strong>Total:</strong> ${(pu.total || 0).toFixed(2)}
+                                            </Typography>
+                                            <Typography>
+                                                <strong>Efectivo:</strong> ${(pu.cash || 0).toFixed(2)}
+                                            </Typography>
+                                            <Typography>
+                                                <strong>Transferencia:</strong> ${(pu.transfer || 0).toFixed(2)}
+                                            </Typography>
+                                            <Typography>
+                                                Fecha: {formatDateDMY(pu.buy_date)} - {pu.buy_time}
+                                            </Typography>
+                                        </Box>
 
-                                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                        <IconButton color="primary" onClick={() => handleEdit(pu)}><EditIcon /></IconButton>
-                                        <IconButton color="error" onClick={() => handleDeleteClick(pu)}><DeleteIcon /></IconButton>
+                                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                            <IconButton color="primary" onClick={() => handleEdit(pu)}>
+                                                <EditIcon />
+                                            </IconButton>
+                                            <IconButton color="error" onClick={() => handleDeleteClick(pu)}>
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </Box>
                                     </Box>
-                                </Box>
-                            </Paper>
-                        ))}
+                                </Paper>
+                            ))}
+                        </Box>
                     </Box>
                 )}
+
+                {/* Dialogo de confirmación para eliminar */}
+                <Dialog open={openDialog} onClose={cancelDelete}>
+                    <DialogTitle>Confirmar eliminación</DialogTitle>
+                    <DialogContent>
+                        <DialogContentText>
+                            ¿Estás seguro de que querés eliminar esta compra? Esto ajustará el stock automáticamente.
+                        </DialogContentText>
+                        {selectedPurchase && (
+                            <Box sx={{ mt: 2 }}>
+                                <Typography variant="subtitle2">{selectedPurchase.product_name}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Proveedor: {selectedPurchase.supplier_name}
+                                </Typography>
+                                <Typography sx={{ mt: 1 }}>
+                                    Cantidad: {selectedPurchase.quantity} {selectedPurchase.unitType || "unit"}
+                                </Typography>
+                                <Typography>Total: ${(selectedPurchase.total || 0).toFixed(2)}</Typography>
+                            </Box>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={cancelDelete}>Cancelar</Button>
+                        <Button onClick={confirmDelete} color="error" variant="contained">
+                            Eliminar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </TabPanel>
 
-            {/* Dialogo de confirmación para eliminar */}
-            <Dialog open={openDialog} onClose={cancelDelete}>
-                <DialogTitle>Confirmar eliminación</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Estás seguro de que querés eliminar esta compra? Esto ajustará el stock automáticamente.
-                    </DialogContentText>
-                    {selectedPurchase && (
-                        <Box sx={{ mt: 2 }}>
-                            <Typography variant="subtitle2">{selectedPurchase.product_name}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Proveedor: {selectedPurchase.supplier_name}
-                            </Typography>
-                            <Typography sx={{ mt: 1 }}>
-                                Cantidad: {selectedPurchase.quantity} {selectedPurchase.unitType || "unit"}
-                            </Typography>
-                            <Typography>
-                                Total: ${(selectedPurchase.total || 0).toFixed(2)}
-                            </Typography>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={cancelDelete}>Cancelar</Button>
-                    <Button onClick={confirmDelete} color="error" variant="contained">Eliminar</Button>
-                </DialogActions>
-            </Dialog>
-
             {/* Snackbar */}
-            <Snackbar open={open}
-                autoHideDuration={3000}
-                onClose={closeSnackbar}
-                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+            <Snackbar open={open} autoHideDuration={3000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
                 <Alert severity={severity} onClose={closeSnackbar}>
                     {message}
                 </Alert>

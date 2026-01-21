@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { BottomNavigation, BottomNavigationAction } from "@mui/material";
-import { useNavigate } from "react-router-dom";   // ✅ importar navigate
+import { BottomNavigation, BottomNavigationAction, useTheme, useMediaQuery } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import PointOfSaleIcon from "@mui/icons-material/PointOfSale";   // Caja
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';             // Proveedores
+import LocalShippingIcon from '@mui/icons-material/LocalShipping'; // Proveedores
 import SearchIcon from "@mui/icons-material/Search";             // Buscar
-import AddShoppingCartIcon from "@mui/icons-material/AddShoppingCart"; //Agregar productos
+import AddShoppingCartIcon from "@mui/icons-material/AddShoppingCart"; // Productos
 import MenuIcon from "@mui/icons-material/Menu";                 // Menú
 import SuppliersSheet from "../modules/suppliers/SuppliersSheet";
 import CashSheet from "../modules/cash/CashSheet";
@@ -18,12 +18,14 @@ export default function BottomNav() {
     const [showProducts, setShowProducts] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
 
-    const navigate = useNavigate(); // ✅ hook para navegar
+    const navigate = useNavigate();
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
     return (
         <>
             <BottomNavigation
-                showLabels
+                showLabels={!isMobile} // en móvil solo íconos, en desktop íconos + labels
                 value={value}
                 onChange={(event, newValue) => setValue(newValue)}
                 sx={{
@@ -32,42 +34,41 @@ export default function BottomNav() {
                     left: 0,
                     right: 0,
                     backgroundColor: "#930fff",
-                    borderTopLeftRadius: "16px", // esquina superior izquierda 
-                    borderTopRightRadius: "16px", // esquina superior derecha 
-                    overflow: "hidden", // 👈 asegura que el contenido respete el borde redondeado
-
+                    borderTopLeftRadius: "16px",
+                    borderTopRightRadius: "16px",
+                    overflow: "hidden",
+                    height: isMobile ? 56 : 64, // altura más compacta en móvil
                 }}
             >
                 <BottomNavigationAction
                     label="Buscar"
-                    icon={<SearchIcon />}
+                    icon={<SearchIcon fontSize={isMobile ? "small" : "medium"} />}
                     onClick={() => navigate("/")}
-                    sx={{ color: "white" }}  // ✅ redirige a la pantalla principal
+                    sx={{ color: "white", minWidth: isMobile ? 50 : 80 }}
                 />
                 <BottomNavigationAction
                     label="Caja"
-                    icon={<PointOfSaleIcon />}
+                    icon={<PointOfSaleIcon fontSize={isMobile ? "small" : "medium"} />}
                     onClick={() => setShowCash(true)}
-                    sx={{ color: "white" }}
+                    sx={{ color: "white", minWidth: isMobile ? 50 : 80 }}
                 />
                 <BottomNavigationAction
                     label="Proveedores"
-                    icon={<LocalShippingIcon />}
+                    icon={<LocalShippingIcon fontSize={isMobile ? "small" : "medium"} />}
                     onClick={() => setShowSuppliers(true)}
-                    sx={{ color: "white" }}
+                    sx={{ color: "white", minWidth: isMobile ? 50 : 80 }}
                 />
-
                 <BottomNavigationAction
                     label="Productos"
-                    icon={<AddShoppingCartIcon />}
+                    icon={<AddShoppingCartIcon fontSize={isMobile ? "small" : "medium"} />}
                     onClick={() => setShowProducts(true)}
-                    sx={{ color: "white" }}
+                    sx={{ color: "white", minWidth: isMobile ? 50 : 80 }}
                 />
                 <BottomNavigationAction
                     label="Menú"
-                    icon={<MenuIcon />}
+                    icon={<MenuIcon fontSize={isMobile ? "small" : "medium"} />}
                     onClick={() => setShowMenu(true)}
-                    sx={{ color: "white" }}
+                    sx={{ color: "white", minWidth: isMobile ? 50 : 80 }}
                 />
             </BottomNavigation>
 
