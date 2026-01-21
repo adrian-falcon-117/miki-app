@@ -14,19 +14,18 @@ Permite gestionar productos, compras y caja de manera simple y rápida.
 ---
 
 ## 📂 Estructura del proyecto
-
+///
 miki-app/
-
-├── backend/ 
-
+├── backend/
 │   ├── server.js
 │   ├── package.json
 │   └── database.sqlite
-├── miki-app/       
+├── miki-app/
 │   ├── src/
 │   ├── public/
 │   └── package.json
 └── .gitignore
+///
 
 
 ---
