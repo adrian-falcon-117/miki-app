@@ -73,17 +73,17 @@ db.run(`
     cash REAL DEFAULT 0,
     transfer REAL DEFAULT 0,
     canceled INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    sale_date DATE DEFAULT (date('now')),
+    sale_time TIME DEFAULT (time('now'))
   )
 `);
 
 // Registrar nueva venta
 app.post("/sales", (req, res) => {
-    const { description, amount, cash, transfer, canceled, created_at } = req.body;
-
+    const { description, amount, cash, transfer, canceled, sale_date, sale_time } = req.body;
     db.run(
-        "INSERT INTO sales (description, amount, cash, transfer, canceled, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        [description, amount, cash || 0, transfer || 0, canceled ? 1 : 0, created_at || new Date().toISOString()],
+        "INSERT INTO sales (description, amount, cash, transfer, canceled, sale_date, sale_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [description, amount, cash || 0, transfer || 0, canceled ? 1 : 0, sale_date, sale_time],
         function (err) {
             if (err) return res.status(500).json({ error: "Error al registrar venta" });
             db.get("SELECT * FROM sales WHERE id = ?", [this.lastID], (getErr, row) => {
@@ -96,7 +96,7 @@ app.post("/sales", (req, res) => {
 
 // Obtener todas las ventas
 app.get("/sales", (req, res) => {
-    db.all("SELECT * FROM sales ORDER BY created_at DESC", [], (err, rows) => {
+    db.all("SELECT * FROM sales ORDER BY sale_date DESC", [], (err, rows) => {
         if (err) {
             console.error("Error al obtener ventas:", err);
             return res.status(500).json({ error: "Error al obtener ventas" });
@@ -137,27 +137,26 @@ app.get("/reports/sales-by-month", (req, res) => {
         return res.status(400).json({ error: "Debes enviar mes y año" });
     }
 
-    // Formato YYYY-MM
-    const start = `${year}-${month.padStart(2, "0")}-01`;
-    const end = `${year}-${month.padStart(2, "0")}-31`;
-
     const sql = `
-    SELECT * 
-    FROM sales
-    WHERE canceled = 0
-      AND strftime('%Y', created_at) = ?
-      AND strftime('%m', created_at) = ?
-    ORDER BY created_at DESC;
-  `;
+        SELECT * 
+        FROM sales
+        WHERE canceled = 0
+          AND strftime('%Y', sale_date) = ?
+          AND strftime('%m', sale_date) = ?
+        ORDER BY sale_date DESC, sale_time DESC;
+    `;
 
     db.all(sql, [year, month.padStart(2, "0")], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            console.error("Error al obtener ventas:", err);
+            return res.status(500).json({ error: err.message });
+        }
 
         const total = rows.reduce((acc, r) => acc + (r.amount || 0), 0);
         res.json({ rows, total });
     });
 });
-
+//Ventas por item------------------------------------------------------
 
 //-------------------------------------------------------------------------
 // Crear tabla de productos con todos los campos
@@ -183,6 +182,47 @@ app.get("/products", (req, res) => {
         res.json(rows);
     });
 });
+
+// --- Buscar producto exacto o coincidencias parciales ordenadas ---
+app.get("/products/search", (req, res) => {
+    const q = req.query.q || "";
+    if (!q) return res.json([]);
+
+    const like = `%${q}%`;
+    const startsWith = `${q}%`;
+
+    // Primero coincidencia exacta
+    db.all(
+        `SELECT * FROM products 
+     WHERE LOWER(name) = LOWER(?) OR LOWER(barcode) = LOWER(?)`,
+        [q, q],
+        (err, exactRows) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            if (exactRows.length > 0) {
+                return res.json(exactRows);
+            }
+
+            // Si no hay exacta, buscamos coincidencias parciales ordenadas
+            db.all(
+                `SELECT * FROM products 
+         WHERE LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?) 
+         ORDER BY 
+           CASE 
+             WHEN LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?) THEN 0
+             ELSE 1
+           END`,
+                [like, like, startsWith, startsWith],
+                (err2, rows) => {
+                    if (err2) return res.status(500).json({ error: err2.message });
+                    res.json(rows);
+                }
+            );
+        }
+    );
+});
+
+
 
 // --- Agregar producto ---
 app.post("/products", (req, res) => {
@@ -257,104 +297,172 @@ app.delete("/products/:id", (req, res) => {
     });
 });
 
-// -------------------------------------------------------------------------
-// Endpoints de estadísticas
 
-// Ventas vs Compras por periodo
+// --- Descontar stock de un producto ---
+app.put("/products/:id/decrement", (req, res) => {
+    const { id } = req.params;
+    const { quantity } = req.body; // cantidad a descontar (puede ser unidades o kg)
+
+    if (!quantity || quantity <= 0) {
+        return res.status(400).json({ error: "Cantidad inválida" });
+    }
+
+    // Restamos directamente del campo stock
+    db.run(
+        "UPDATE products SET stock = stock - ? WHERE id = ?",
+        [quantity, id],
+        function (err) {
+            if (err) return res.status(500).json({ error: "Error al descontar stock" });
+            if (this.changes === 0) return res.status(404).json({ error: "Producto no encontrado" });
+
+            // Devolvemos el producto actualizado
+            db.get("SELECT * FROM products WHERE id = ?", [id], (err2, row) => {
+                if (err2) return res.status(500).json({ error: "Error al leer producto actualizado" });
+                res.json(row);
+            });
+        }
+    );
+});
+
+
+
+// Estadisticas-------------------------------------------------------------------------
+// Ventas por mes del año seleccionado
 app.get("/reports/sales", (req, res) => {
-    const { group = "month", start, end } = req.query;
-
-    // Agrupación: day, month, year
-    let format;
-    if (group === "day") format = "%Y-%m-%d";
-    else if (group === "year") format = "%Y";
-    else format = "%Y-%m"; // default month
+    const { year } = req.query;
+    if (!year) return res.status(400).json({ error: "Falta el año" });
 
     const sql = `
-    SELECT strftime('${format}', created_at) AS period,
-           SUM(amount) AS sales,
-           SUM(cash + transfer) AS cash_total,
-           SUM(transfer) AS transfer_total,
-           SUM(canceled) AS canceled_count
-    FROM sales
-    WHERE created_at BETWEEN COALESCE(?, datetime('now', '-1 year'))
-                        AND COALESCE(?, datetime('now'))
-    GROUP BY period
-    ORDER BY period;
-  `;
+        SELECT strftime('%m', sale_date) AS month,
+               SUM(amount) AS total_sales
+        FROM sales
+        WHERE canceled = 0
+          AND strftime('%Y', sale_date) = ?
+        GROUP BY month
+        ORDER BY month ASC;
+    `;
 
-    db.all(sql, [start, end], (err, rows) => {
+    db.all(sql, [year], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+
+        const result = Array.from({ length: 12 }, (_, i) => {
+            const month = String(i + 1).padStart(2, "0");
+            const row = rows.find(r => r.month === month);
+            return { month, total_sales: row ? row.total_sales : 0 };
+        });
+
+        res.json(result);
     });
 });
 
-// Top productos vendidos
-app.get("/reports/top-products", (req, res) => {
-    const { start, end, limit = 10 } = req.query;
+// Compras por mes del año seleccionado
+app.get("/reports/purchases", (req, res) => {
+    const { year } = req.query;
+    if (!year) return res.status(400).json({ error: "Falta el año" });
 
-    // Necesitamos relacionar ventas con productos: aquí supongo que la tabla sales tiene descripción = nombre producto
     const sql = `
-    SELECT description AS name,
-           COUNT(*) AS times_sold,
-           SUM(amount) AS revenue
-    FROM sales
-    WHERE canceled = 0
-      AND created_at BETWEEN COALESCE(?, datetime('now', '-1 year'))
-                        AND COALESCE(?, datetime('now'))
-    GROUP BY description
-    ORDER BY times_sold DESC
-    LIMIT ?;
-  `;
+        SELECT strftime('%m', buy_date) AS month,
+               SUM(total) AS total_purchases
+        FROM purchases
+        WHERE strftime('%Y', buy_date) = ?
+        GROUP BY month
+        ORDER BY month ASC;
+    `;
 
-    db.all(sql, [start, end, limit], (err, rows) => {
+    db.all(sql, [year], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+
+        const result = Array.from({ length: 12 }, (_, i) => {
+            const month = String(i + 1).padStart(2, "0");
+            const row = rows.find(r => r.month === month);
+            return { month, total_purchases: row ? row.total_purchases : 0 };
+        });
+
+        res.json(result);
     });
 });
 
-// Resumen de margen
+// Resumen de margen del año seleccionado
 app.get("/reports/margin-summary", (req, res) => {
-    const { start, end } = req.query;
+    const { year } = req.query;
+    if (!year) return res.status(400).json({ error: "Falta el año" });
 
-    // Ventas totales
     const salesSql = `
-    SELECT SUM(amount) AS total_sales,
-           AVG(amount) AS avg_ticket
-    FROM sales
-    WHERE canceled = 0
-      AND created_at BETWEEN COALESCE(?, datetime('now', '-1 year'))
-                        AND COALESCE(?, datetime('now'));
-  `;
+        SELECT SUM(amount) AS total_sales
+        FROM sales
+        WHERE canceled = 0
+          AND strftime('%Y', sale_date) = ?;
+    `;
 
-    // Compras totales (usamos purchasePrice * stock como aproximación)
     const purchasesSql = `
-    SELECT SUM(purchasePrice * stock) AS total_purchases
-    FROM products;
-  `;
+        SELECT SUM(total) AS total_purchases
+        FROM purchases
+        WHERE strftime('%Y', buy_date) = ?;
+    `;
 
-    db.get(salesSql, [start, end], (err, salesRow) => {
+    db.get(salesSql, [year], (err, salesRow) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        db.get(purchasesSql, [], (err2, purchasesRow) => {
+        db.get(purchasesSql, [year], (err2, purchasesRow) => {
             if (err2) return res.status(500).json({ error: err2.message });
 
-            const total_sales = salesRow.total_sales || 0;
-            const total_purchases = purchasesRow.total_purchases || 0;
+            const total_sales = salesRow?.total_sales || 0;
+            const total_purchases = purchasesRow?.total_purchases || 0;
             const gross_margin = total_sales - total_purchases;
 
-            res.json({
-                total_sales,
-                total_purchases,
-                gross_margin,
-                avg_ticket: salesRow.avg_ticket || 0
-            });
+            res.json({ total_sales, total_purchases, gross_margin });
         });
     });
 });
 
-//Compras----------------------------------------------------------------------------
-// Crear tabla de compras
+// Productos más vendidos por año
+app.get("/reports/top-products", (req, res) => {
+    const { year, limit = 10 } = req.query;
+    if (!year) return res.status(400).json({ error: "Falta el año" });
+
+    const sql = `
+        SELECT description AS name,
+               COUNT(*) AS times_sold,
+               SUM(amount) AS revenue
+        FROM sales
+        WHERE canceled = 0
+          AND strftime('%Y', sale_date) = ?
+        GROUP BY description
+        ORDER BY times_sold DESC
+        LIMIT ?;
+    `;
+
+    db.all(sql, [year, limit], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Métodos de pago por año
+app.get("/reports/payment-methods", (req, res) => {
+    const { year } = req.query;
+    if (!year) return res.status(400).json({ error: "Falta el año" });
+
+    const sql = `
+        SELECT SUM(cash) AS total_cash,
+               SUM(transfer) AS total_transfer
+        FROM sales
+        WHERE canceled = 0
+          AND strftime('%Y', sale_date) = ?;
+    `;
+
+    db.get(sql, [year], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json({
+            total_cash: row?.total_cash || 0,
+            total_transfer: row?.total_transfer || 0
+        });
+    });
+});
+
+
+// Compras----------------------------------------------------------------------------
 // --- Asegurar columna unitType en purchases (si la tabla ya existe sin la columna)
 db.get("PRAGMA table_info(purchases)", (err, info) => {
     // Si la tabla no existe, la creación más abajo la manejará; aquí solo comprobamos columnas
@@ -370,36 +478,48 @@ db.get("PRAGMA table_info(purchases)", (err, info) => {
         }
     });
 });
-
+//TODO Aqui
 // --- Crear tabla purchases si no existe (asegura esquema inicial)
-db.run(`CREATE TABLE IF NOT EXISTS purchases (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  product_id INTEGER NOT NULL,
-  supplier_id INTEGER NOT NULL,
-  quantity REAL NOT NULL,
-  unit_cost REAL NOT NULL,
-  total REAL NOT NULL,
-  unitType TEXT DEFAULT 'unit',
-  cash REAL DEFAULT 0,   
-  transfer REAL DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(product_id) REFERENCES products(id),
-  FOREIGN KEY(supplier_id) REFERENCES suppliers(id)
-)
+db.run(`CREATE TABLE IF NOT EXISTS purchases ( 
+    id INTEGER PRIMARY KEY AUTOINCREMENT, 
+    product_id INTEGER NOT NULL, 
+    supplier_id INTEGER NOT NULL, 
+    quantity REAL NOT NULL, 
+    unit_cost REAL NOT NULL, 
+    total REAL NOT NULL, 
+    unitType TEXT DEFAULT 'unit', 
+    cash REAL DEFAULT 0, 
+    transfer REAL DEFAULT 0, 
+    buy_date DATE DEFAULT (date('now','localtime')), 
+    buy_time TIME DEFAULT (time('now','localtime')), 
+    FOREIGN KEY(product_id) REFERENCES products(id), 
+    FOREIGN KEY(supplier_id) REFERENCES suppliers(id) );
 `);
 
-// POST /purchases - registrar compra, actualizar stock, purchasePrice y salePrice
 app.post("/purchases", (req, res) => {
-    const { product_id, supplier_id, quantity, unit_cost, unitType, cash, transfer } = req.body;
+    const { product_id, supplier_id, quantity, unit_cost, unitType, cash, transfer, buy_date, buy_time } = req.body;
+
     if (!product_id || !supplier_id || quantity == null || unit_cost == null) {
         return res.status(400).json({ error: "Faltan datos obligatorios" });
     }
+
     const total = Number(quantity) * Number(unit_cost);
 
     db.run(
-        `INSERT INTO purchases (product_id, supplier_id, quantity, unit_cost, total, unitType, cash, transfer)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [product_id, supplier_id, quantity, unit_cost, total, unitType || "unit", cash || 0, transfer || 0],
+        `INSERT INTO purchases (product_id, supplier_id, quantity, unit_cost, total, unitType, cash, transfer, buy_date, buy_time)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            product_id,
+            supplier_id,
+            quantity,
+            unit_cost,
+            total,
+            unitType || "unit",
+            cash || 0,
+            transfer || 0,
+            buy_date || new Date().toISOString().slice(0, 10),
+            buy_time || new Date().toISOString().slice(11, 16)
+        ],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
 
@@ -416,7 +536,7 @@ app.post("/purchases", (req, res) => {
                     salePrice = Number(unit_cost) + (Number(product.incrementValue) || 0);
                 }
 
-                // 2️⃣ Actualizar stock, purchasePrice, salePrice y unitType del producto
+                // 2️⃣ Actualizar stock y precios del producto
                 db.run(
                     `UPDATE products
            SET stock = COALESCE(stock, 0) + ?, 
@@ -428,11 +548,12 @@ app.post("/purchases", (req, res) => {
                     function (updateErr) {
                         if (updateErr) return res.status(500).json({ error: updateErr.message });
 
-                        // 3️⃣ Devolver la compra recién insertada con joins
+                        // 3️⃣ Devolver la compra recién insertada
                         db.get(
-                            `SELECT pu.id, pu.product_id, pu.supplier_id, pu.quantity, pu.unit_cost, pu.total, 
-                      pu.unitType, pu.cash, pu.transfer, pu.created_at,
-                      pr.name AS product_name, s.name AS supplier_name
+                            `SELECT pu.id, pu.product_id, pu.supplier_id, pu.quantity, pu.unit_cost, pu.total,
+                      pu.unitType, pu.cash, pu.transfer, pu.buy_date, pu.buy_time,
+                      pr.name AS product_name, pr.description AS product_description,
+                      s.name AS supplier_name
                FROM purchases pu
                JOIN products pr ON pr.id = pu.product_id
                JOIN suppliers s ON s.id = pu.supplier_id
@@ -451,36 +572,37 @@ app.post("/purchases", (req, res) => {
 });
 
 
-// GET /purchases - listar compras con filtro opcional por month y year
+
+
+// GET /purchases - listar compras con filtro opcional por mes y año
 // Query params: month (01..12), year (YYYY)
 app.get("/purchases", (req, res) => {
     const { month, year } = req.query;
 
-    // Base SQL con joins para devolver nombres
     let sql = `
-    SELECT pu.id, pu.product_id, pu.supplier_id,
-           pu.quantity, pu.unit_cost, pu.total, pu.unitType, pu.created_at,
-           pr.name AS product_name, s.name AS supplier_name
-    FROM purchases pu
-    JOIN products pr ON pr.id = pu.product_id
-    JOIN suppliers s ON s.id = pu.supplier_id
-  `;
+        SELECT pu.id, pu.product_id, pu.supplier_id,
+               pu.quantity, pu.unit_cost, pu.total, pu.unitType,
+               pu.cash, pu.transfer, pu.buy_date, pu.buy_time,
+               pr.name AS product_name, pr.description AS product_description, s.name AS supplier_name
+        FROM purchases pu
+        JOIN products pr ON pr.id = pu.product_id
+        JOIN suppliers s ON s.id = pu.supplier_id
+    `;
 
     const params = [];
 
     if (year && month) {
-        // Filtrar por mes y año
-        sql += ` WHERE strftime('%Y', pu.created_at) = ? AND strftime('%m', pu.created_at) = ?`;
+        sql += ` WHERE strftime('%Y', pu.buy_date) = ? AND strftime('%m', pu.buy_date) = ?`;
         params.push(String(year), String(month).padStart(2, "0"));
     } else if (year) {
-        sql += ` WHERE strftime('%Y', pu.created_at) = ?`;
+        sql += ` WHERE strftime('%Y', pu.buy_date) = ?`;
         params.push(String(year));
     } else if (month) {
-        sql += ` WHERE strftime('%m', pu.created_at) = ?`;
+        sql += ` WHERE strftime('%m', pu.buy_date) = ?`;
         params.push(String(month).padStart(2, "0"));
     }
 
-    sql += ` ORDER BY pu.created_at DESC`;
+    sql += ` ORDER BY pu.buy_date DESC, pu.buy_time DESC`;
 
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -488,65 +610,113 @@ app.get("/purchases", (req, res) => {
     });
 });
 
+
+
 // PUT /purchases/:id - editar compra y ajustar stock (calcula diferencia)
 app.put("/purchases/:id", (req, res) => {
     const { id } = req.params;
-    const { product_id, supplier_id, quantity, unit_cost, unitType } = req.body;
+    const { product_id, supplier_id, quantity, unit_cost, unitType, cash, transfer, buy_date, buy_time } = req.body;
+
     if (!product_id || !supplier_id || quantity == null || unit_cost == null) {
         return res.status(400).json({ error: "Faltan datos obligatorios" });
     }
+
     const total = Number(quantity) * Number(unit_cost);
 
     db.get("SELECT * FROM purchases WHERE id = ?", [id], (err, oldPurchase) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!oldPurchase) return res.status(404).json({ error: "Compra no encontrada" });
 
-        // Si cambió producto_id, debemos revertir stock del producto anterior y sumar al nuevo
+        // Diferencia de cantidad para ajustar stock
         const diff = Number(quantity) - Number(oldPurchase.quantity);
 
         db.run(
             `UPDATE purchases
-       SET product_id = ?, supplier_id = ?, quantity = ?, unit_cost = ?, total = ?, unitType = ?
+       SET product_id = ?, supplier_id = ?, quantity = ?, unit_cost = ?, total = ?, 
+           unitType = ?, cash = ?, transfer = ?, buy_date = ?, buy_time = ?
        WHERE id = ?`,
-            [product_id, supplier_id, quantity, unit_cost, total, unitType || "unit", id],
+            [
+                product_id,
+                supplier_id,
+                quantity,
+                unit_cost,
+                total,
+                unitType || "unit",
+                cash || 0,
+                transfer || 0,
+                buy_date || oldPurchase.buy_date,
+                buy_time || oldPurchase.buy_time,
+                id
+            ],
             function (updateErr) {
                 if (updateErr) return res.status(500).json({ error: updateErr.message });
 
-                // Si product_id cambió, restar cantidad del producto anterior y sumar al nuevo
+                // Si cambió el producto, ajustar stock de ambos
                 if (Number(oldPurchase.product_id) !== Number(product_id)) {
-                    // restar del producto anterior
+                    // Restar del producto anterior
                     db.run(
                         `UPDATE products SET stock = COALESCE(stock,0) - ? WHERE id = ?`,
                         [oldPurchase.quantity, oldPurchase.product_id],
                         function (r1Err) {
                             if (r1Err) return res.status(500).json({ error: r1Err.message });
 
-                            // sumar al nuevo producto
-                            db.run(
-                                `UPDATE products SET stock = COALESCE(stock,0) + ?, purchasePrice = ? WHERE id = ?`,
-                                [quantity, unit_cost, product_id],
-                                function (r2Err) {
-                                    if (r2Err) return res.status(500).json({ error: r2Err.message });
-                                    res.json({ updated: this.changes });
+                            // Calcular nuevo salePrice
+                            db.get("SELECT * FROM products WHERE id = ?", [product_id], (prodErr, product) => {
+                                if (prodErr) return res.status(500).json({ error: prodErr.message });
+                                if (!product) return res.status(404).json({ error: "Producto no encontrado" });
+
+                                let salePrice = Number(unit_cost);
+                                if (product.incrementType === "percentage") {
+                                    salePrice = Number(unit_cost) * (1 + (Number(product.incrementValue) || 0) / 100);
+                                } else if (product.incrementType === "peso" || product.incrementType === "fixed") {
+                                    salePrice = Number(unit_cost) + (Number(product.incrementValue) || 0);
                                 }
-                            );
+
+                                // Sumar al nuevo producto
+                                db.run(
+                                    `UPDATE products 
+                   SET stock = COALESCE(stock,0) + ?, purchasePrice = ?, salePrice = ?, unitType = ?
+                   WHERE id = ?`,
+                                    [quantity, unit_cost, salePrice, unitType || product.unitType || "unit", product_id],
+                                    function (r2Err) {
+                                        if (r2Err) return res.status(500).json({ error: r2Err.message });
+                                        res.json({ updated: this.changes });
+                                    }
+                                );
+                            });
                         }
                     );
                 } else {
-                    // mismo producto: ajustar por la diferencia
-                    db.run(
-                        `UPDATE products SET stock = COALESCE(stock,0) + ?, purchasePrice = ? WHERE id = ?`,
-                        [diff, unit_cost, product_id],
-                        function (stockErr) {
-                            if (stockErr) return res.status(500).json({ error: stockErr.message });
-                            res.json({ updated: this.changes });
+                    // Mismo producto: ajustar stock por la diferencia
+                    db.get("SELECT * FROM products WHERE id = ?", [product_id], (prodErr, product) => {
+                        if (prodErr) return res.status(500).json({ error: prodErr.message });
+                        if (!product) return res.status(404).json({ error: "Producto no encontrado" });
+
+                        let salePrice = Number(unit_cost);
+                        if (product.incrementType === "percentage") {
+                            salePrice = Number(unit_cost) * (1 + (Number(product.incrementValue) || 0) / 100);
+                        } else if (product.incrementType === "peso" || product.incrementType === "fixed") {
+                            salePrice = Number(unit_cost) + (Number(product.incrementValue) || 0);
                         }
-                    );
+
+                        db.run(
+                            `UPDATE products 
+               SET stock = COALESCE(stock,0) + ?, purchasePrice = ?, salePrice = ?, unitType = ?
+               WHERE id = ?`,
+                            [diff, unit_cost, salePrice, unitType || product.unitType || "unit", product_id],
+                            function (stockErr) {
+                                if (stockErr) return res.status(500).json({ error: stockErr.message });
+                                res.json({ updated: this.changes });
+                            }
+                        );
+                    });
                 }
             }
         );
     });
 });
+
+
 
 // DELETE /purchases/:id - eliminar compra y restar stock
 app.delete("/purchases/:id", (req, res) => {
@@ -603,6 +773,3 @@ const PORT = 4000;
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
-
-
-//Mejorar la editar productos, cpmprar productos y agregar productos

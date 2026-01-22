@@ -14,18 +14,17 @@ Permite gestionar productos, compras y caja de manera simple y rápida.
 ---
 
 ## 📂 Estructura del proyecto
-///
+
 miki-app/
-├── backend/
+├── backend/        # Servidor Node/Express con SQLite
 │   ├── server.js
 │   ├── package.json
-│   └── database.sqlite
-├── miki-app/
+│   └── database.sqlite  (ignorado en git)
+├── miki-app/       # Frontend React (Create React App)
 │   ├── src/
 │   ├── public/
 │   └── package.json
 └── .gitignore
-///
 
 
 ---

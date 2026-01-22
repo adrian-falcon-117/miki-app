@@ -30,6 +30,8 @@ export default function CashClose() {
             `Cierre registrado. Diferencia: ${difference > 0 ? "+" : ""}${difference.toFixed(2)}`,
             difference === 0 ? "success" : (difference > 0 ? "info" : "error")
         );
+        // 🔄 refrescar la interfaz 
+        setTimeout(() => { window.location.reload(); }, 500);
     };
 
     return (

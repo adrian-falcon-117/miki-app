@@ -312,7 +312,7 @@ export default function BuyScreenComplete() {
 
                         {/* Precio Unitario */}
                         <TextField
-                            label="Precio Unitario"
+                            label="Precio Unitario o por Kg"
                             type="number"
                             fullWidth
                             value={form.unit_cost}
@@ -402,7 +402,11 @@ export default function BuyScreenComplete() {
                     </Box>
                 </Box>
 
-                {!isMobile ? (
+                {purchases.length === 0 ? (
+                    <Typography variant="body1" sx={{ mt: 2, color: "text.secondary" }}>
+                        No se encontraron resultados para la búsqueda.
+                    </Typography>
+                ) : !isMobile ? (
                     <Paper>
                         <Table>
                             <TableHead>

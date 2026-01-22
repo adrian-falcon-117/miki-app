@@ -631,35 +631,37 @@ export default function SearchScreen({ onCheckout }) {
 
             <Paper elevation={4} sx={{ marginTop: 3, padding: 2, backgroundColor: "#2e7d32", color: "#fff" }}>
                 <Typography variant="h6" sx={{ fontWeight: "bold" }}>Carrito</Typography>
-                <List>
-                    {cart.map((item, idx) => (
-                        <ListItem
-                            key={`${item.id}-${idx}`}
-                            secondaryAction={
-                                <IconButton
-                                    edge="end"
-                                    color="error"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveFromCart(idx);
-                                    }}
-                                >
-                                    <DeleteIcon />
-                                </IconButton>
-                            }
-                        >
-                            <ListItemText
-                                primary={`${item.name} — ${item.description}`}
-                                secondary={
-                                    item.unitType === "unit"
-                                        ? `${item.quantity} u × $${(Number(item.priceUsed) || 0).toFixed(2)} = $${((Number(item.quantity) || 0) * (Number(item.priceUsed) || 0)).toFixed(2)}`
-                                        : `${(Number(item.quantityKg) || 0).toFixed(3)} kg × $${(Number(item.priceUsedPerKg) || 0).toFixed(2)} = $${(((Number(item.quantityKg) || 0) * (Number(item.priceUsedPerKg) || 0))).toFixed(2)}`
+                <Paper sx={{ maxHeight: 320, overflowY: "auto", backgroundColor: "#2e7d32", color: "#fff" }}>
+                    <List>
+                        {cart.map((item, idx) => (
+                            <ListItem
+                                key={`${item.id}-${idx}`}
+                                secondaryAction={
+                                    <IconButton
+                                        edge="end"
+                                        color="error"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveFromCart(idx);
+                                        }}
+                                    >
+                                        <DeleteIcon />
+                                    </IconButton>
                                 }
-                            />
-                            {item.note ? <div style={{ color: "#ffeb3b", marginLeft: 12 }}>{item.note}</div> : null}
-                        </ListItem>
-                    ))}
-                </List>
+                            >
+                                <ListItemText
+                                    primary={`${item.name} — ${item.description}`}
+                                    secondary={
+                                        item.unitType === "unit"
+                                            ? `${item.quantity} u × $${(Number(item.priceUsed) || 0).toFixed(2)} = $${((Number(item.quantity) || 0) * (Number(item.priceUsed) || 0)).toFixed(2)}`
+                                            : `${(Number(item.quantityKg) || 0).toFixed(3)} kg × $${(Number(item.priceUsedPerKg) || 0).toFixed(2)} = $${(((Number(item.quantityKg) || 0) * (Number(item.priceUsedPerKg) || 0))).toFixed(2)}`
+                                    }
+                                />
+                                {item.note ? <div style={{ color: "#ffeb3b", marginLeft: 12 }}>{item.note}</div> : null}
+                            </ListItem>
+                        ))}
+                    </List>
+                </Paper>
 
                 <Typography variant="h6" sx={{ fontWeight: "bold", marginTop: 2 }}>
                     Total del carrito: ${totalCart.toFixed(2)}

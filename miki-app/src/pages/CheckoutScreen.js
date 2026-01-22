@@ -155,7 +155,7 @@ export default function CheckoutSale({ cart = [], onFinish }) {
             }
 
 
-            showSnackbar("Venta registrada ✅", "success");
+            showSnackbar("Venta registrada", "success");
 
             if (typeof onFinish === "function") {
                 onFinish({ ...createdSale, change, cart });
@@ -202,22 +202,24 @@ export default function CheckoutSale({ cart = [], onFinish }) {
                 <Typography variant="h6" sx={{ fontWeight: "bold" }}>
                     Detalle de productos
                 </Typography>
-                <List>
-                    {cart.map((item, idx) => (
-                        <ListItem key={idx}>
-                            <ListItemText
-                                primary={`${item.name} – ${item.description} – ${item.unitType === "unit"
-                                    ? `Cantidad: ${item.quantity}`
-                                    : `Peso: ${Number(item.quantityKg || 0).toFixed(2)} kg`
-                                    }`}
-                                secondary={`Subtotal: $${item.unitType === "unit"
-                                    ? ((Number(item.quantity) || 0) * (Number(item.priceUsed) || 0)).toFixed(2)
-                                    : ((Number(item.quantityKg) || 0) * (Number(item.priceUsedPerKg) || 0)).toFixed(2)
-                                    }`}
-                            />
-                        </ListItem>
-                    ))}
-                </List>
+                <Paper sx={{ maxHeight: 300, overflowY: "auto", backgroundColor: "#2e7d32", color: "#fff" }}>
+                    <List>
+                        {cart.map((item, idx) => (
+                            <ListItem key={idx}>
+                                <ListItemText
+                                    primary={`${item.name} – ${item.description} – ${item.unitType === "unit"
+                                        ? `Cantidad: ${item.quantity}`
+                                        : `Peso: ${Number(item.quantityKg || 0).toFixed(2)} kg`
+                                        }`}
+                                    secondary={`Subtotal: $${item.unitType === "unit"
+                                        ? ((Number(item.quantity) || 0) * (Number(item.priceUsed) || 0)).toFixed(2)
+                                        : ((Number(item.quantityKg) || 0) * (Number(item.priceUsedPerKg) || 0)).toFixed(2)
+                                        }`}
+                                />
+                            </ListItem>
+                        ))}
+                    </List>
+                </Paper>
 
                 <Typography variant="h6" sx={{ fontWeight: "bold", mt: 2 }}>
                     Total a pagar: ${totalCart.toFixed(2)}
