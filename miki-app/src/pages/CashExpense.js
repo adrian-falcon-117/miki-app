@@ -50,7 +50,7 @@ export default function CashExpense() {
 
         setAmount("");
         setDescription("");
-        showSnackbar("Egreso registrado ✅", "success");
+        showSnackbar("Egreso registrado", "success");
     };
 
     return (

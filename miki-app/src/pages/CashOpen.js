@@ -12,14 +12,16 @@ export default function CashOpen() {
 
     const handleOpen = () => {
         if (!opening || isNaN(Number(opening))) {
-            showSnackbar("Monto inválido ❌", "error");
+            showSnackbar("Monto inválido", "error");
             return;
         }
 
         openCashbox(opening);
-        showSnackbar("Caja abierta con éxito 🚀", "success");
+        showSnackbar("Caja abierta con éxito", "success");
         setOpening("");
         navigate("/");
+        // 🔄 refrescar la interfaz 
+        setTimeout(() => { window.location.reload(); }, 500);
     };
 
     return (

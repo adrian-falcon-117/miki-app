@@ -84,7 +84,7 @@ export default function CashSales() {
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
     const { cashboxOpening, setCashboxOpening, isOpen } = useCashbox();
-    const { open: snackOpen, message: snackMessage, severity: snackSeverity, showSnackbar, closeSnackbar } = useSnackbar();
+    const { open, message, severity, showSnackbar, closeSnackbar } = useSnackbar();
 
     // formatea fecha
     const formatDate = (dateString) => {
@@ -166,7 +166,7 @@ export default function CashSales() {
             setSales(newSales); // 👈 ahora dentro del try
             recalcAndSaveTotals(newSales);
 
-            showSnackbar("Venta cancelada ✅", "success");
+            showSnackbar("Venta cancelada", "success");
         } catch (err) {
             console.error("Error cancelando venta:", err.response?.data || err.message);
             showSnackbar("Error al cancelar venta", "error");
@@ -193,7 +193,7 @@ export default function CashSales() {
             setSales(newSales);
             recalcAndSaveTotals(newSales);
 
-            showSnackbar("Venta reactivada ✅", "success");
+            showSnackbar("Venta reactivada", "success");
         } catch (err) {
             console.error("Error reactivando venta:", err.response?.data || err.message);
             showSnackbar("Error al reactivar venta", "error");
@@ -233,10 +233,6 @@ export default function CashSales() {
                         Abrí la caja para ver las ventas de esa apertura.
                     </Typography>
                 </Paper>
-
-                <Snackbar open={snackOpen} autoHideDuration={3000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-                    <Alert severity={snackSeverity} onClose={closeSnackbar}>{snackMessage}</Alert>
-                </Snackbar>
             </>
         );
     }
@@ -362,8 +358,13 @@ export default function CashSales() {
 
             </Paper>
 
-            <Snackbar open={snackOpen} autoHideDuration={3000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-                <Alert severity={snackSeverity} onClose={closeSnackbar}>{snackMessage}</Alert>
+            <Snackbar open={open}
+                autoHideDuration={3000}
+                onClose={closeSnackbar}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+                <Alert severity={severity} onClose={closeSnackbar}>
+                    {message}
+                </Alert>
             </Snackbar>
 
             <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>

@@ -65,7 +65,7 @@ export default function AddProduct() {
 
     return (
         <div style={{ padding: "20px" }}>
-            <Typography variant="h5">Agregar Producto</Typography>
+            <Typography style={{ paddingBottom: "10px" }} variant="h5">Agregar Producto</Typography>
             <Stack spacing={2}>
                 <TextField
                     label="Código de barras"
